@@ -1,140 +1,99 @@
-# ======================================================================
-# Define options
-# ======================================================================
-set val(chan)           Channel/WirelessChannel    ;# channel type
-set val(prop)           Propagation/TwoRayGround   ;# radio-propagation model
-set val(netif)          Phy/WirelessPhy            ;# network interface type
-set val(mac)            Mac/802_11                 ;# MAC type
-set val(ifq)            Queue/DropTail/PriQueue    ;# interface queue type
-set val(ll)             LL                         ;# link layer type
-set val(ant)            Antenna/OmniAntenna        ;# antenna model
-set val(ifqlen)         50                         ;# max packet in ifq
-set val(nn)             7                          ;# number of mobilenodes
-set val(rp)             DSDV                       ;# routing protocol
+# DEFINE OPTIONS
 
-# ======================================================================
-# Main Program
-# ======================================================================
+set val(chan)	Channel/WirelessChannel		;# channel type
+set val(prop)	Propagation/TwoRayGround	;# radio-propogation model
+set val(netif)	Phy/WirelessPhy			;# network interface type
+set val(mac)	Mac/802_11			;# MAC type
+set val(ifq)	Queue/DropTail/PriQueue		;# interface queue type
+set val(ll)	LL				;# link layer type
+set val(ant)	Antenna/OmniAntenna		;# antenna model
+set val(ifqlen)	50				;# max packet in ifq
+set val(nn)	2				;# number of mobilenodes
+set val(rp)	DSDV				;# routing protocol
 
+set ns [new Simulator]
 
-#
-# Initialize Global Variables
-#
-set ns_		[new Simulator]
-set tracefd     [open simple.tr w]
-$ns_ trace-all $tracefd
-set namtrace [open out.nam w]
-$ns_ namtrace-all-wireless $namtrace  500 500
+# trace file
+$ns use-newtrace
+set tracefd [open simple.tr w]
+$ns trace-all $tracefd
 
+# namtrace file
+set namtrace [open less.nam w]
+$ns namtrace-all-wireless $namtrace 500 500
 
-# set up topography object
-set topo       [new Topography]
-
+set topo [new Topography]
 $topo load_flatgrid 500 500
 
-#
-# Create God
-#
 create-god $val(nn)
 
-#
-#  Create the specified number of mobilenodes [$val(nn)] and "attach" them
-#  to the channel. 
-#  Here two nodes are created : node(0) and node(1)
+$ns node-config -adhocRouting $val(rp) \
+		-llType	$val(ll) \
+		-macType $val(mac) \
+		-ifqType $val(ifq) \
+		-ifqLen $val(ifqlen) \
+		-antType $val(ant) \
+		-propType $val(prop) \
+		-phyType $val(netif) \
+		-channelType $val(chan) \
+		-topoInstance $topo \
+		-agentTrace ON \
+		-routerTrace ON \
+		-macTrace OFF \
+		-movementTrace OFF
 
-# configure node
+# define nodes
+for {set i 1} {$i <= $val(nn)} {incr i} {
+	set node($i) [$ns node]
+	$node($i) random-motion 0;
+}
 
-        $ns_ node-config -adhocRouting $val(rp) \
-			 -llType $val(ll) \
-			 -macType $val(mac) \
-			 -ifqType $val(ifq) \
-			 -ifqLen $val(ifqlen) \
-			 -antType $val(ant) \
-			 -propType $val(prop) \
-			 -phyType $val(netif) \
-			 -channelType $val(chan) \
-			 -topoInstance $topo \
-			 -agentTrace ON \
-			 -routerTrace ON \
-			 -macTrace OFF \
-			 -movementTrace OFF			
-			 
-	for {set i 0} {$i < $val(nn) } {incr i} {
-		set node_($i) [$ns_ node]	
-		$node_($i) random-motion 0		;# disable random motion
-	}
-  for {set i 0} {$i < $val(nn)  } {incr i } {
-            $node_($i) color red
-            
-      }
+# set x and y for nodes
+for {set i 1} {$i <= $val(nn)} {incr i} {
+	$node($i) set X_ [expr int(rand()*300)]
+	$node($i) set Y_ [expr int(rand()*300)]
+	$node($i) set Z_ 0.0
+}
 
-#
-# Provide initial (X,Y, for now Z=0) co-ordinates for mobilenodes
-#
-$node_(0) color red
-$node_(0) set X_ 5.0
+# set destination of nodes for movement
+for {set i 1} {$i <= $val(nn)} {incr i} {
+	$ns at [expr ($i+1)*5] "$node($i) setdest [expr int(rand()*300)] [expr int(rand()*300)] [expr int(rand()*20)]"
+}
 
-$node_(0) set Y_ 2.0
-$node_(0) set Z_ 0.0
-
-$node_(1) shape hexagon
-$node_(1) set X_ 390.0
-
-$node_(1) set Y_ 385.0
-$node_(1) set Z_ 0.0
-
-$node_(2) set X_ 150.0
-$node_(2) set Y_ 240.0
-$node_(2) set Z_ 0.0
-
-# Generation of movements
-$ns_ at 10.0 "$node_(0) setdest 250.0 250.0 3.0"
-$ns_ at 15.0 "$node_(1) setdest 45.0 285.0 5.0"
-$ns_ at 19.0 "$node_(2) setdest 480.0 300.0 5.0"
-# Defining a transport agent for sending
+# define udp agents
 set udp [new Agent/UDP]
-
-# Attaching transport agent to sender node
-$ns_ attach-agent $node_(0) $udp
-
-# Defining a transport agent for receiving
 set null [new Agent/Null]
 
-# Attaching transport agent to receiver node
-$ns_ attach-agent $node_(1) $null
+# attach udp agents to network
+$ns attach-agent $node(1) $udp
+$ns attach-agent $node($val(nn)) $null
 
-#Connecting sending and receiving transport agents
-$ns_ connect $udp $null
+# connect source and sink
+$ns connect $udp $null
 
-#Defining Application instance
+# define cbr application for udp
 set cbr [new Application/Traffic/CBR]
 
-# Attaching transport agent to application agent
+# attach application to agent
 $cbr attach-agent $udp
 
-#Packet size in bytes and interval in seconds definition
+# configure cbr application
 $cbr set packetSize_ 512
-$cbr set interval_ 0.1
+$cbr set interval 0.1
 
-# data packet generation starting time
-$ns_ at 1.0 "$cbr start"
+$ns at 1.0 "$cbr start"
 
-# data packet generation ending time
-#$ns at 6.0 "$cbr stop"
-# Tell nodes when the simulation ends
-#
-for {set i 0} {$i < $val(nn) } {incr i} {
-    $ns_ at 150.0 "$node_($i) reset";
+for {set i 1} {$i <= $val(nn)} {incr i} {
+	$ns at 300.0 "$node($i) reset";
 }
-$ns_ at 150.0 "stop"
-$ns_ at 150.01 "puts \"NS EXITING...\" ; $ns_ halt"
+
+$ns at 300.0 "stop"
+
 proc stop {} {
-    global ns_ tracefd
-    $ns_ flush-trace
-    close $tracefd
-	exec nam out.nam &
+	global ns tracefd
+	$ns flush-trace
+	exec nam less.nam
+	close $tracefd
 }
 
-puts "Starting Simulation..."
-$ns_ run
-
+$ns run
