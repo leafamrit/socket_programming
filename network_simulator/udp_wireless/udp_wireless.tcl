@@ -8,8 +8,8 @@ set val(ifq)	Queue/DropTail/PriQueue		;# interface queue type
 set val(ll)	LL				;# link layer type
 set val(ant)	Antenna/OmniAntenna		;# antenna model
 set val(ifqlen)	50				;# max packet in ifq
-set val(nn)	8				;# number of mobilenodes
-set val(rp)	DSDV				;# routing protocol
+set val(nn)	20				;# number of mobilenodes
+set val(rp)	AODV				;# routing protocol
 
 set ns [new Simulator]
 
